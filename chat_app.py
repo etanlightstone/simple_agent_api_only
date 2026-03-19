@@ -56,7 +56,7 @@ class ChatResponse(BaseModel):
     response: str
     conversation_id: str
 
-@add_tracing(name='single_question_agent', autolog_frameworks=["pydantic_ai"])
+@add_tracing(name='single_question_agent_api', autolog_frameworks=["pydantic_ai"])
 async def ask_agent(question):
     # Create a fresh agent with a new API key for each request
     # This handles the 5-minute VLLM_API_KEY expiration
@@ -71,8 +71,7 @@ async def chat(request: ChatMessage) -> ChatResponse:
     """
     try:
         # Run the agent with the user's message
-        with DominoRun(agent_config_path=config_path) as run:
-            result = await ask_agent(request.message)
+       result = await ask_agent(request.message)
         
         # Generate or use existing conversation ID
         conv_id = request.conversation_id or str(id(request))
