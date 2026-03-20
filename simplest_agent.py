@@ -116,7 +116,7 @@ def _build_model():
 agent = Agent(
     _build_model(),
     retries=retries,
-    system_prompt=system_prompt,
+    instructions=system_prompt,
     instrument=True,
 )
 agent.tool(science_quote)
