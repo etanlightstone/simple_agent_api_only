@@ -1,52 +1,37 @@
-import asyncio
 import os
 import yaml
-import string
-import requests
 import random
+import httpx
+import requests as req_lib
 from pydantic_ai import Agent, RunContext
-from pydantic import BaseModel
-from typing import Dict, Any, Annotated
-from pydantic_ai.mcp import MCPServerStdio
-from pydantic_ai.models.openai import OpenAIModel, ModelSettings
+from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from domino.agents.tracing import add_tracing, search_traces
-from domino.agents.logging import DominoRun,log_evaluation
-
-from pydantic_ai.models.test import TestModel
+from domino.agents.logging import DominoRun, log_evaluation
 
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
-# Load configuration from YAML file
 config_path = os.path.join(script_dir, 'ai_system_config.yaml')
-
 
 with open(config_path, 'r') as f:
     config = yaml.safe_load(f)
 
-# Extract configuration values
-oai_model = config['model']['full_name']
-
 retries = config['agent']['retries']
-
 system_prompt = config['prompts']['simple_agent_system']
 
 
-BASE_URL = "https://genai2-620r.engineering-dev.domino.tech/endpoints/c611d820-56c2-4b7a-b9b5-1b450852d13b/v1"
+# ---------------------------------------------------------------------------
+# Tools (defined at module level so they're registered once on the agent)
+# ---------------------------------------------------------------------------
 
-os.environ["BASE_URL"] = BASE_URL
-
-
-
-# Tool functions defined outside the agent so they can be registered on new agents
 def science_quote(ctx: RunContext[str], question: str) -> str:
     """
     Use this function to answer any question with a random science quote.
-    
+
     Args:
         ctx: The context of the run.
         question: The question
-    
+
     Returns:
         A science quote
     """
@@ -63,18 +48,17 @@ def science_quote(ctx: RunContext[str], question: str) -> str:
         "Science is a way of thinking much more than it is a body of knowledge. — Carl Sagan",
         "Equipped with his five senses, man explores the universe around him and calls the adventure Science. — Edwin Hubble"
     ]
-    
     return random.choice(quotes)
 
 
 def philosophy_quote(ctx: RunContext[str], question: str) -> str:
     """
     Use this function to answer any question with a random philosophy quote.
-    
+
     Args:
         ctx: The context of the run.
         question: The question
-    
+
     Returns:
         A philosophy quote
     """
@@ -89,44 +73,56 @@ def philosophy_quote(ctx: RunContext[str], question: str) -> str:
     return random.choice(quotes)
 
 
+# ---------------------------------------------------------------------------
+# Model construction — one long-lived instance
+# ---------------------------------------------------------------------------
+
+def _build_model():
+    """Build the LLM model from config. Called once at import time."""
+    provider_name = config['model']['provider']
+
+    if provider_name == 'vllm':
+        base_url = config['model']['base_url']
+        token_url = config['model']['token_url']
+
+        # httpx event hook that fetches a fresh Domino auth token before
+        # every outgoing request to the vLLM endpoint. This replaces the
+        # old create_agent() pattern of rebuilding the entire agent per
+        # request just to rotate the 5-minute token.
+        async def _refresh_vllm_token(request: httpx.Request):
+            token = req_lib.get(token_url).text
+            request.headers["authorization"] = f"Bearer {token}"
+
+        http_client = httpx.AsyncClient(
+            event_hooks={"request": [_refresh_vllm_token]}
+        )
+
+        provider = OpenAIProvider(
+            base_url=base_url,
+            api_key="refreshed-per-request",
+            http_client=http_client,
+        )
+        return OpenAIModel("", provider=provider)
+
+    # OpenAI (or any provider whose full_name pydantic_ai can resolve)
+    # uses OPENAI_API_KEY from env automatically — no token rotation needed.
+    return config['model']['full_name']
+
+
+# ---------------------------------------------------------------------------
+# Single long-lived agent — safe for use with .to_a2a() and FastAPI
+# ---------------------------------------------------------------------------
+
+agent = Agent(
+    _build_model(),
+    retries=retries,
+    system_prompt=system_prompt,
+    instrument=True,
+)
+agent.tool(science_quote)
+agent.tool(philosophy_quote)
+
+
 def create_agent():
-    """
-    Factory function to create a fresh agent with a new API key.
-    Call this before each chat request since the VLLM_API_KEY expires every 5 minutes.
-    """
-    VLLM_API_KEY = requests.get("http://localhost:8899/access-token").text
-    
-    print("Config set:", BASE_URL)
-    
-    provider = OpenAIProvider(
-        base_url=os.environ["BASE_URL"],
-        api_key=VLLM_API_KEY,
-    )
-    
-    vllm_model = OpenAIModel("", provider=provider)  # have to leave model name blank?
-    
-    m = TestModel(custom_output_text="This is the answer from fake LLM")
-    
-    selected_model = oai_model
-    if config['model']['provider'] == 'vllm':
-        selected_model = vllm_model
-
-    the_agent = Agent(
-        selected_model,
-        retries=retries,
-        system_prompt=system_prompt,
-        instrument=True
-    )
-    
-    # Register tools on the fresh agent
-    the_agent.tool(science_quote)
-    the_agent.tool(philosophy_quote)
-    
-    return the_agent
-
-
-# Create a default agent for backwards compatibility (e.g., direct script usage)
-simplest_agent = create_agent()
-
-#user_query = "what is the limit for 401k contribution 2023?"
-
+    """Backwards-compatible factory. Returns the shared long-lived agent."""
+    return agent

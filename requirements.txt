@@ -1,0 +1,18 @@
+# Core agent framework
+pydantic-ai>=1.9.1
+fasta2a>=0.6.0
+
+# Web server
+fastapi>=0.115.7
+uvicorn>=0.34.0
+
+# HTTP clients
+httpx>=0.28.1
+requests>=2.31.0
+
+# Data / config
+pydantic>=2.12.3
+PyYAML>=6.0.2
+
+# Domino platform SDK (provides domino.agents.tracing, domino.agents.logging)
+dominodatalab>=2.0.0

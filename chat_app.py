@@ -1,5 +1,6 @@
 """
-Web-based chat backend that serves an HTML/JS front-end for the simplest_agent.py philosophy agent.
+Hybrid server: serves the chat UI, a custom REST API (/chat), and the
+A2A protocol (/a2a) — all from a single FastAPI process.
 """
 
 import argparse
@@ -14,28 +15,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 
-# Configure logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 from domino.agents.tracing import add_tracing
 from domino.agents.logging import DominoRun
 
-# Import the agent factory from simplest_agent.py
-# We use create_agent() to get a fresh agent with a new API key before each request
-# since the VLLM_API_KEY expires every 5 minutes
-from simplest_agent import create_agent
+from simplest_agent import agent
 
-# Get the directory where this script is located
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(SCRIPT_DIR, "static")
 
-# Load configuration from YAML file
-config_path = os.path.join(SCRIPT_DIR, 'ai_system_config.yaml')
-
 app = FastAPI(title="Simple Agent Chat", description="Chat interface for the simple agent")
 
-# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -56,26 +48,19 @@ class ChatResponse(BaseModel):
     response: str
     conversation_id: str
 
+
 @add_tracing(name='single_question_agent_api', autolog_frameworks=["pydantic_ai"])
 async def ask_agent(question):
-    # Create a fresh agent with a new API key for each request
-    # This handles the 5-minute VLLM_API_KEY expiration
-    agent = create_agent()
     result = await agent.run(question)
     return result
 
+
 @app.post("/chat")
 async def chat(request: ChatMessage) -> ChatResponse:
-    """
-    Process a chat message using the simplest_agent.
-    """
+    """Process a chat message using the simplest_agent."""
     try:
-        # Run the agent with the user's message
-       result = await ask_agent(request.message)
-        
-        # Generate or use existing conversation ID
+        result = await ask_agent(request.message)
         conv_id = request.conversation_id or str(id(request))
-        
         return ChatResponse(
             response=result.output,
             conversation_id=conv_id
@@ -92,7 +77,11 @@ async def health_check():
     return {"status": "healthy", "agent": "simplest_agent"}
 
 
-# Serve static files (CSS, JS) - must be after API routes
+# A2A protocol — other agents can reach this at /a2a/message/send
+# and discover the agent card at /a2a/.well-known/agent.json
+app.mount("/a2a", agent.to_a2a())
+
+# Serve static files (CSS, JS) — must be after API routes
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
@@ -109,15 +98,13 @@ async def serve_static_files(path: str):
     This allows the app to work when hosted at any base path.
     """
     file_path = os.path.join(STATIC_DIR, path)
-    
-    # Security: ensure we don't serve files outside static dir
+
     if not os.path.abspath(file_path).startswith(os.path.abspath(STATIC_DIR)):
         raise HTTPException(status_code=403, detail="Forbidden")
-    
+
     if os.path.isfile(file_path):
         return FileResponse(file_path)
-    
-    # For any other path, serve index.html (SPA-style routing)
+
     return FileResponse(os.path.join(STATIC_DIR, "index.html"))
 
 
@@ -141,10 +128,15 @@ if __name__ == "__main__":
         help="Enable debug mode with verbose logging"
     )
     args = parser.parse_args()
-    
+
     log_level = "debug" if args.debug else "info"
-    
+
     print(f"Starting chat server on http://localhost:{args.port}")
+    print(f"  Chat UI:      http://localhost:{args.port}/")
+    print(f"  REST API:     POST http://localhost:{args.port}/chat")
+    print(f"  A2A protocol: POST http://localhost:{args.port}/a2a/message/send")
+    print(f"  A2A card:     GET  http://localhost:{args.port}/a2a/.well-known/agent.json")
+    print(f"  Health:       GET  http://localhost:{args.port}/health")
     print(f"Serving static files from: {STATIC_DIR}")
     print(f"Log level: {log_level}")
     uvicorn.run(app, host=args.host, port=args.port, log_level=log_level)
