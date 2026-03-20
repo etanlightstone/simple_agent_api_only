@@ -13,6 +13,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.docs import get_swagger_ui_html
 from pydantic import BaseModel
 import uvicorn
 
@@ -70,6 +71,8 @@ app = FastAPI(
     title="Simple Agent Chat",
     description="Chat interface for the simple agent",
     lifespan=lifespan,
+    docs_url=None,
+    redoc_url=None,
 )
 
 app.add_middleware(
@@ -119,6 +122,15 @@ async def chat(request: ChatMessage) -> ChatResponse:
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "agent": "simplest_agent"}
+
+
+@app.get("/docs", include_in_schema=False)
+async def custom_swagger_docs():
+    """Swagger UI with a relative openapi.json URL so it works behind a reverse proxy."""
+    return get_swagger_ui_html(
+        openapi_url="openapi.json",
+        title=f"{app.title} - Swagger UI",
+    )
 
 
 IN_DOMINO = bool(os.environ.get("DOMINO_API_HOST"))
