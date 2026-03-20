@@ -66,7 +66,7 @@
     <main class="playground">
         <!-- Try It panel -->
         <section class="panel try-panel">
-            <h2>Try It</h2>
+            <h2>Try It <span style="font-weight:400; font-size:0.75rem; color:var(--text-muted)">— REST API (synchronous)</span></h2>
             <div class="input-group">
                 <label for="tryInput">Message</label>
                 <input type="text" id="tryInput" placeholder="What is the meaning of life?" value="What is the meaning of life?" autocomplete="off" />
@@ -112,6 +112,7 @@
             </div>
 
             <div class="tab-content" id="tab-a2a-curl">
+                <div class="a2a-note">A2A is async: <code>message/send</code> returns a task ID immediately. Poll with <code>tasks/get</code> to retrieve the result once the agent finishes.</div>
                 <div class="code-header">
                     <span class="code-label">A2A Protocol — curl (JSON-RPC)</span>
                     <button class="copy-btn" data-target="code-a2a-curl">Copy</button>
@@ -120,6 +121,7 @@
             </div>
 
             <div class="tab-content" id="tab-a2a-python">
+                <div class="a2a-note">A2A is async: <code>message/send</code> returns a task ID immediately. Poll with <code>tasks/get</code> to retrieve the result once the agent finishes.</div>
                 <div class="code-header">
                     <span class="code-label">A2A Protocol — Python (a2a-sdk)</span>
                     <button class="copy-btn" data-target="code-a2a-python">Copy</button>
@@ -135,7 +137,7 @@
                 <div class="endpoint">
                     <span class="method post">POST</span>
                     <code id="ep-chat"></code>
-                    <span class="ep-desc">Send a message (REST)</span>
+                    <span class="ep-desc">Send &amp; get answer (sync)</span>
                 </div>
                 <div class="endpoint">
                     <span class="method get">GET</span>
@@ -145,7 +147,7 @@
                 <div class="endpoint">
                     <span class="method post">POST</span>
                     <code id="ep-a2a-send"></code>
-                    <span class="ep-desc">A2A message/send (JSON-RPC)</span>
+                    <span class="ep-desc">A2A send → poll tasks/get (async)</span>
                 </div>
                 <div class="endpoint">
                     <span class="method get">GET</span>

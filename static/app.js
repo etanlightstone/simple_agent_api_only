@@ -12,6 +12,10 @@
 
     const BASE = getBaseUrl();
 
+    function escapeHtml(str) {
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
     // --- Populate endpoint list ------------------------------------------
 
     document.getElementById('ep-chat').textContent = `${BASE}/chat`;
@@ -53,10 +57,10 @@ print(data["response"])
 const data = await response.json();
 console.log(data.response);`,
 
-            'a2a-curl': `# Discover the agent card
+            'a2a-curl': `# Step 1 — Discover the agent card
 curl '${BASE}/a2a/.well-known/agent-card.json'
 
-# Send a message via the A2A protocol (JSON-RPC 2.0)
+# Step 2 — Send a message (returns a task ID immediately)
 curl -X POST '${BASE}/a2a/' \\
   -H 'Content-Type: application/json' \\
   -d '{
@@ -73,16 +77,31 @@ curl -X POST '${BASE}/a2a/' \\
         "messageId": "msg-001"
       }
     }
-  }'`,
+  }'
+# ↑ Response includes "result.id" — the task ID.
 
-            'a2a-python': `# Using the official a2a-sdk client
-#   pip install a2a-sdk
-import httpx
+# Step 3 — Poll for the completed result
+# Replace TASK_ID with the "result.id" value from Step 2.
+curl -X POST '${BASE}/a2a/' \\
+  -H 'Content-Type: application/json' \\
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "tasks/get",
+    "params": {
+      "id": "TASK_ID"
+    }
+  }'
+# Repeat until result.status.state is "completed".
+# The agent reply is in result.artifacts[0].parts[0].text`,
+
+            'a2a-python': `# pip install a2a-sdk httpx
+import asyncio, httpx
 from uuid import uuid4
 from a2a.client import A2ACardResolver, A2AClient
 from a2a.types import (
-    MessageSendParams,
-    SendMessageRequest,
+    MessageSendParams, SendMessageRequest,
+    GetTaskRequest, GetTaskParams,
 )
 
 async def main():
@@ -91,36 +110,45 @@ async def main():
     async with httpx.AsyncClient() as httpx_client:
         # 1. Discover the agent card
         resolver = A2ACardResolver(
-            httpx_client=httpx_client,
-            base_url=base_url,
+            httpx_client=httpx_client, base_url=base_url,
         )
         agent_card = await resolver.get_agent_card()
         print(f"Agent: {agent_card.name}")
 
-        # 2. Create the A2A client
+        # 2. Send a message (returns immediately with task ID)
         client = A2AClient(
-            httpx_client=httpx_client,
-            agent_card=agent_card,
+            httpx_client=httpx_client, agent_card=agent_card,
         )
-
-        # 3. Send a message
-        request = SendMessageRequest(
+        send_resp = await client.send_message(SendMessageRequest(
             id=str(uuid4()),
-            params=MessageSendParams(
-                message={
-                    "kind": "message",
-                    "role": "user",
-                    "parts": [
-                        {"kind": "text", "text": "${message}"}
-                    ],
-                    "messageId": uuid4().hex,
-                }
-            ),
-        )
-        response = await client.send_message(request)
-        print(response.model_dump(mode="json", exclude_none=True))
+            params=MessageSendParams(message={
+                "kind": "message",
+                "role": "user",
+                "parts": [{"kind": "text", "text": "${message}"}],
+                "messageId": uuid4().hex,
+            }),
+        ))
+        task = send_resp.result
+        print(f"Task submitted: {task.id}  state={task.status.state}")
 
-# Run with: asyncio.run(main())`,
+        # 3. Poll until the task completes
+        while task.status.state in ("submitted", "working"):
+            await asyncio.sleep(1)
+            get_resp = await client.get_task(GetTaskRequest(
+                id=str(uuid4()),
+                params=GetTaskParams(id=task.id),
+            ))
+            task = get_resp.result
+            print(f"  state={task.status.state}")
+
+        # 4. Read the agent's answer
+        if task.artifacts:
+            for part in task.artifacts[0].parts:
+                print(f"Agent: {part.text}")
+        else:
+            print(f"Task ended with state: {task.status.state}")
+
+asyncio.run(main())`,
         };
     }
 
@@ -176,7 +204,7 @@ async def main():
         tryBtn.disabled = true;
         tryBtn.textContent = 'Sending...';
         tryResult.className = 'result-box';
-        tryResult.textContent = 'Waiting for response...';
+        tryResult.innerHTML = '<span style="color:var(--text-muted)">Waiting for response…</span>';
 
         try {
             const res = await fetch(`${BASE}/chat`, {
@@ -192,7 +220,19 @@ async def main():
 
             const data = await res.json();
             tryResult.className = 'result-box success';
-            tryResult.textContent = JSON.stringify(data, null, 2);
+
+            const answer = data.response || data.result || JSON.stringify(data, null, 2);
+            tryResult.innerHTML = '';
+
+            const answerEl = document.createElement('div');
+            answerEl.className = 'result-answer';
+            answerEl.textContent = answer;
+            tryResult.appendChild(answerEl);
+
+            const meta = document.createElement('div');
+            meta.className = 'result-meta';
+            meta.innerHTML = `<details><summary>Raw JSON response</summary><pre><code>${escapeHtml(JSON.stringify(data, null, 2))}</code></pre></details>`;
+            tryResult.appendChild(meta);
         } catch (err) {
             tryResult.className = 'result-box error';
             tryResult.textContent = `Error: ${err.message}`;

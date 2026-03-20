@@ -528,6 +528,60 @@ pre code {
     white-space: pre;
 }
 
+/* ── A2A info note ── */
+.a2a-note {
+    background: var(--domino-blue-bg);
+    border-left: 3px solid var(--domino-blue);
+    padding: 0.6rem 0.85rem;
+    margin-bottom: 0.75rem;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.a2a-note code {
+    font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+    font-size: 0.75rem;
+    background: rgba(45, 110, 206, 0.1);
+    padding: 0.1rem 0.35rem;
+    border-radius: 3px;
+    color: var(--domino-blue);
+}
+
+/* ── Response display ── */
+.result-answer {
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: var(--text-primary);
+    margin-bottom: 0.65rem;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, Helvetica, Arial, sans-serif;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.result-meta {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    border-top: 1px solid var(--border-color);
+    padding-top: 0.5rem;
+    margin-top: 0.25rem;
+}
+
+.result-meta summary {
+    cursor: pointer;
+    font-weight: 500;
+    user-select: none;
+}
+
+.result-meta pre {
+    margin-top: 0.4rem;
+    padding: 0.5rem;
+    font-size: 0.7rem;
+    border: none;
+    background: transparent;
+}
+
 /* ── Endpoints panel ── */
 .endpoints-panel {
     grid-column: 1;
