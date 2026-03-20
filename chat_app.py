@@ -7,6 +7,7 @@ import argparse
 import os
 import logging
 import traceback
+from contextlib import asynccontextmanager
 from typing import Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -26,7 +27,23 @@ from simplest_agent import agent
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(SCRIPT_DIR, "static")
 
-app = FastAPI(title="Simple Agent Chat", description="Chat interface for the simple agent")
+# Build the A2A sub-app first so we can wire its TaskManager into
+# FastAPI's lifespan.  Mounted sub-apps don't get their own lifespan
+# triggered by the parent, so we do it explicitly.
+a2a_app = agent.to_a2a()
+
+
+@asynccontextmanager
+async def lifespan(app):
+    async with a2a_app.task_manager:
+        yield
+
+
+app = FastAPI(
+    title="Simple Agent Chat",
+    description="Chat interface for the simple agent",
+    lifespan=lifespan,
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -77,9 +94,9 @@ async def health_check():
     return {"status": "healthy", "agent": "simplest_agent"}
 
 
-# A2A protocol — other agents can reach this at /a2a/message/send
-# and discover the agent card at /a2a/.well-known/agent.json
-app.mount("/a2a", agent.to_a2a())
+# A2A protocol — other agents can reach this at /a2a/
+# and discover the agent card at /a2a/.well-known/agent-card.json
+app.mount("/a2a", a2a_app)
 
 # Serve static files (CSS, JS) — must be after API routes
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -135,7 +152,7 @@ if __name__ == "__main__":
     print(f"  Chat UI:      http://localhost:{args.port}/")
     print(f"  REST API:     POST http://localhost:{args.port}/chat")
     print(f"  A2A protocol: POST http://localhost:{args.port}/a2a/message/send")
-    print(f"  A2A card:     GET  http://localhost:{args.port}/a2a/.well-known/agent.json")
+    print(f"  A2A card:     GET  http://localhost:{args.port}/a2a/.well-known/agent-card.json")
     print(f"  Health:       GET  http://localhost:{args.port}/health")
     print(f"Serving static files from: {STATIC_DIR}")
     print(f"Log level: {log_level}")

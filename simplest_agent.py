@@ -4,7 +4,7 @@ import random
 import httpx
 import requests as req_lib
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from domino.agents.tracing import add_tracing, search_traces
 from domino.agents.logging import DominoRun, log_evaluation
@@ -102,7 +102,7 @@ def _build_model():
             api_key="refreshed-per-request",
             http_client=http_client,
         )
-        return OpenAIModel("", provider=provider)
+        return OpenAIChatModel("", provider=provider)
 
     # OpenAI (or any provider whose full_name pydantic_ai can resolve)
     # uses OPENAI_API_KEY from env automatically — no token rotation needed.

@@ -4,23 +4,23 @@
 # Model Configuration
 # To switch providers, uncomment the desired model block and comment out the others.
 
-# OpenAI (external API — uses OPENAI_API_KEY env var, no base_url/token_url needed)
-# model:
-#   provider: "openai"
-#   name: "gpt-4.1-mini"
-#   full_name: "openai:gpt-4.1-mini"
-#   temperature: 0.1
-#   max_tokens: 100096
+# OpenAI (external API — uses OPENAI_API_KEY env var in the Domino Project settings, no base_url/token_url needed)
+model:
+  provider: "openai"
+  name: "gpt-4.1-mini"
+  full_name: "openai:gpt-4.1-mini"
+  temperature: 0.1
+  max_tokens: 100096
 
 # vLLM hosted in Domino (OpenAI-compatible endpoint with rotating auth token)
-model:
-  provider: "vllm"
-  name: "qwen-3-4b"
-  full_name: "qwen-3-4b"
-  temperature: 0.1
-  max_tokens: 10096
-  base_url: "https://genai2-620r.engineering-dev.domino.tech/endpoints/c611d820-56c2-4b7a-b9b5-1b450852d13b/v1"
-  token_url: "http://localhost:8899/access-token"
+# model:
+#   provider: "vllm"
+#   name: "qwen-3-4b"
+#   full_name: "qwen-3-4b"
+#   temperature: 0.1
+#   max_tokens: 10096
+#   base_url: "https://genai2-620r.engineering-dev.domino.tech/endpoints/c611d820-56c2-4b7a-b9b5-1b450852d13b/v1"
+#   token_url: "http://localhost:8899/access-token"
 
 # vLLM alternate model
 # model:

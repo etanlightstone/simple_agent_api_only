@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Agent Chat</title>
+    <title>Agent API Playground</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -11,49 +11,115 @@
 </head>
 <body>
     <header class="header">
-        <div class="header-icon">🤖</div>
+        <div class="header-icon">⚡</div>
         <div class="header-content">
-            <h1>Philosophy Agent</h1>
-            <p>Powered by AI • Ask me anything</p>
+            <h1>Agent API Playground</h1>
+            <p>REST + A2A Protocol</p>
         </div>
         <div class="status-indicator">
-            <div class="status-dot"></div>
-            <span>Online</span>
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">Checking...</span>
         </div>
     </header>
-    
-    <main id="chatContainer" class="chat-container">
-        <div class="welcome-container" id="welcomeScreen">
-            <div class="welcome-icon">✨</div>
-            <h2>How can I help you today?</h2>
-            <p>I'm a simple philosophy agent ready to answer your questions. Just type a message below to get started.</p>
-            <div class="suggestions">
-                <button class="suggestion" data-suggestion="Why is the sky blue?">Why is the sky blue?</button>
-                <button class="suggestion" data-suggestion="What is the meaning of life?">What is the meaning of life?</button>
-                <button class="suggestion" data-suggestion="Tell me something interesting">Tell me something interesting</button>
+
+    <main class="playground">
+        <!-- Try It panel -->
+        <section class="panel try-panel">
+            <h2>Try It</h2>
+            <div class="input-group">
+                <label for="tryInput">Message</label>
+                <input type="text" id="tryInput" placeholder="What is the meaning of life?" value="What is the meaning of life?" autocomplete="off" />
             </div>
-        </div>
+            <button id="tryBtn" class="btn-primary">Send Request</button>
+            <div class="result-box" id="tryResult">
+                <div class="result-placeholder">Response will appear here</div>
+            </div>
+        </section>
+
+        <!-- Tabs for code samples -->
+        <section class="panel code-panel">
+            <div class="tabs">
+                <button class="tab active" data-tab="curl">curl</button>
+                <button class="tab" data-tab="python">Python</button>
+                <button class="tab" data-tab="javascript">JavaScript</button>
+                <button class="tab" data-tab="a2a-curl">A2A curl</button>
+                <button class="tab" data-tab="a2a-python">A2A Python</button>
+            </div>
+
+            <div class="tab-content active" id="tab-curl">
+                <div class="code-header">
+                    <span class="code-label">REST API — curl</span>
+                    <button class="copy-btn" data-target="code-curl">Copy</button>
+                </div>
+                <pre><code id="code-curl"></code></pre>
+            </div>
+
+            <div class="tab-content" id="tab-python">
+                <div class="code-header">
+                    <span class="code-label">REST API — Python (requests)</span>
+                    <button class="copy-btn" data-target="code-python">Copy</button>
+                </div>
+                <pre><code id="code-python"></code></pre>
+            </div>
+
+            <div class="tab-content" id="tab-javascript">
+                <div class="code-header">
+                    <span class="code-label">REST API — JavaScript (fetch)</span>
+                    <button class="copy-btn" data-target="code-javascript">Copy</button>
+                </div>
+                <pre><code id="code-javascript"></code></pre>
+            </div>
+
+            <div class="tab-content" id="tab-a2a-curl">
+                <div class="code-header">
+                    <span class="code-label">A2A Protocol — curl (JSON-RPC)</span>
+                    <button class="copy-btn" data-target="code-a2a-curl">Copy</button>
+                </div>
+                <pre><code id="code-a2a-curl"></code></pre>
+            </div>
+
+            <div class="tab-content" id="tab-a2a-python">
+                <div class="code-header">
+                    <span class="code-label">A2A Protocol — Python (a2a-sdk)</span>
+                    <button class="copy-btn" data-target="code-a2a-python">Copy</button>
+                </div>
+                <pre><code id="code-a2a-python"></code></pre>
+            </div>
+        </section>
+
+        <!-- Endpoints reference -->
+        <section class="panel endpoints-panel">
+            <h2>Endpoints</h2>
+            <div class="endpoint-list">
+                <div class="endpoint">
+                    <span class="method post">POST</span>
+                    <code id="ep-chat"></code>
+                    <span class="ep-desc">Send a message (REST)</span>
+                </div>
+                <div class="endpoint">
+                    <span class="method get">GET</span>
+                    <code id="ep-health"></code>
+                    <span class="ep-desc">Health check</span>
+                </div>
+                <div class="endpoint">
+                    <span class="method post">POST</span>
+                    <code id="ep-a2a-send"></code>
+                    <span class="ep-desc">A2A message/send (JSON-RPC)</span>
+                </div>
+                <div class="endpoint">
+                    <span class="method get">GET</span>
+                    <code id="ep-a2a-card"></code>
+                    <span class="ep-desc">A2A Agent Card</span>
+                </div>
+                <div class="endpoint">
+                    <span class="method get">GET</span>
+                    <code id="ep-docs"></code>
+                    <span class="ep-desc">OpenAPI docs (Swagger)</span>
+                </div>
+            </div>
+        </section>
     </main>
-    
-    <footer class="input-area">
-        <div class="input-wrapper">
-            <input 
-                type="text" 
-                id="messageInput" 
-                placeholder="Type your message..." 
-                autocomplete="off"
-            />
-            <button id="sendBtn">
-                <span>Send</span>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="22" y1="2" x2="11" y2="13"></line>
-                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                </svg>
-            </button>
-        </div>
-    </footer>
 
     <script src="app.js"></script>
 </body>
 </html>
-
