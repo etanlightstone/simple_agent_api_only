@@ -1,8 +1,6 @@
 (function () {
     'use strict';
 
-    // Detect the base URL from the current browser location so all sample
-    // code shows the correct host, port, and path prefix automatically.
     function getBaseUrl() {
         let path = window.location.pathname;
         if (path.endsWith('/index.html')) path = path.slice(0, -11);
@@ -161,18 +159,86 @@ asyncio.run(main())`,
         }
     }
 
-    // Initial render + update on input change
     updateSnippets();
     document.getElementById('tryInput').addEventListener('input', updateSnippets);
 
-    // --- Tabs -------------------------------------------------------------
+    // --- Agent Card code snippets ----------------------------------------
 
-    document.querySelectorAll('.tab').forEach(tab => {
+    function generateCardSnippets() {
+        return {
+            'card-curl': `curl '${BASE}/a2a/.well-known/agent-card.json' | python -m json.tool`,
+
+            'card-python': `import requests
+
+response = requests.get("${BASE}/a2a/.well-known/agent-card.json")
+card = response.json()
+
+print(f"Agent: {card['name']}")
+print(f"Description: {card['description']}")
+print(f"Version: {card['version']}")
+print(f"Skills: {len(card.get('skills', []))}")
+for skill in card.get("skills", []):
+    print(f"  - {skill['name']}: {skill['description']}")`,
+
+            'card-javascript': `const response = await fetch('${BASE}/a2a/.well-known/agent-card.json');
+const card = await response.json();
+
+console.log(\`Agent: \${card.name}\`);
+console.log(\`Description: \${card.description}\`);
+console.log(\`Version: \${card.version}\`);
+for (const skill of card.skills ?? []) {
+    console.log(\`  - \${skill.name}: \${skill.description}\`);
+}`,
+        };
+    }
+
+    function updateCardSnippets() {
+        const snippets = generateCardSnippets();
+        for (const [key, code] of Object.entries(snippets)) {
+            const el = document.getElementById(`code-${key}`);
+            if (el) el.textContent = code;
+        }
+    }
+
+    updateCardSnippets();
+
+    // --- Code panel tabs (playground) ------------------------------------
+
+    document.querySelectorAll('.code-panel .tab').forEach(tab => {
         tab.addEventListener('click', () => {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            const panel = tab.closest('.code-panel');
+            panel.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            panel.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             tab.classList.add('active');
-            document.getElementById(`tab-${tab.dataset.tab}`).classList.add('active');
+            panel.querySelector(`#tab-${tab.dataset.tab}`).classList.add('active');
+        });
+    });
+
+    // --- Agent Card code tabs --------------------------------------------
+
+    document.querySelectorAll('.agent-card-code-panel .tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            const panel = tab.closest('.agent-card-code-panel');
+            panel.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            panel.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            tab.classList.add('active');
+            panel.querySelector(`#tab-${tab.dataset.cardTab}`).classList.add('active');
+        });
+    });
+
+    // --- Page tab switching (Playground / Agent Card) ---------------------
+
+    document.querySelectorAll('.page-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            const target = tab.dataset.pageTab;
+            document.querySelectorAll('.page-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+
+            document.querySelectorAll('.page-content').forEach(p => p.classList.remove('active'));
+            const page = document.querySelector(`.page-content[data-page="${target}"]`);
+            if (page) page.classList.add('active');
+
+            if (target === 'agent-card') fetchAgentCard();
         });
     });
 
@@ -249,21 +315,15 @@ asyncio.run(main())`,
     // --- Health check on load ---------------------------------------------
 
     (async () => {
-        const dot = document.getElementById('statusDot');
-        const text = document.getElementById('statusText');
         const statusRunning = document.getElementById('statusRunning');
         try {
             const res = await fetch(`${BASE}/health`);
             if (res.ok) {
-                dot.className = 'status-dot online';
-                text.textContent = 'Online';
                 if (statusRunning) statusRunning.textContent = 'Running';
             } else {
                 throw new Error();
             }
         } catch {
-            dot.className = 'status-dot offline';
-            text.textContent = 'Offline';
             if (statusRunning) {
                 statusRunning.textContent = 'Offline';
                 statusRunning.style.color = '#D9534F';
@@ -271,12 +331,96 @@ asyncio.run(main())`,
         }
     })();
 
-    // --- "View App" top button triggers the Try It send -------------------
-    const tryBtnTop = document.getElementById('tryBtnTop');
-    if (tryBtnTop) {
-        tryBtnTop.addEventListener('click', () => {
-            window.open(`${BASE}/docs`, '_blank');
-        });
+    // --- API Docs link ------------------------------------------------------
+    const apiDocsLink = document.getElementById('tryBtnTop');
+    if (apiDocsLink) {
+        apiDocsLink.href = `${BASE}/docs`;
+        apiDocsLink.target = '_blank';
+        apiDocsLink.rel = 'noopener';
     }
+
+    // --- Agent Card fetch & render ----------------------------------------
+
+    async function fetchAgentCard() {
+        const container = document.getElementById('agentCardContent');
+        container.innerHTML = '<span style="color:var(--text-muted)">Loading agent card…</span>';
+
+        try {
+            const res = await fetch(`${BASE}/a2a/.well-known/agent-card.json`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const card = await res.json();
+            renderAgentCard(card, container);
+        } catch (err) {
+            container.innerHTML = `<div class="result-box error">Error loading agent card: ${escapeHtml(err.message)}</div>`;
+        }
+    }
+
+    function renderAgentCard(card, container) {
+        let html = '<div class="agent-card-pretty">';
+
+        html += field('Name', escapeHtml(card.name || '—'));
+        html += field('Description', escapeHtml(card.description || '—'));
+        html += field('Version', escapeHtml(card.version || '—'));
+
+        if (card.provider) {
+            const org = escapeHtml(card.provider.organization || '');
+            const url = card.provider.url || '';
+            const providerHtml = url
+                ? `${org} — <a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a>`
+                : org;
+            html += field('Provider', providerHtml);
+        }
+
+        if (card.url) {
+            html += field('URL', `<a href="${escapeHtml(card.url)}" target="_blank" rel="noopener">${escapeHtml(card.url)}</a>`);
+        }
+
+        if (card.skills && card.skills.length) {
+            html += '<div class="agent-card-field">';
+            html += '<span class="agent-card-field-label">Skills</span>';
+            html += '<div class="agent-card-skills">';
+            for (const skill of card.skills) {
+                html += '<div class="agent-card-skill">';
+                html += `<div class="agent-card-skill-name">${escapeHtml(skill.name || skill.id)}</div>`;
+                if (skill.description) {
+                    html += `<div class="agent-card-skill-desc">${escapeHtml(skill.description)}</div>`;
+                }
+                if (skill.tags && skill.tags.length) {
+                    html += '<div class="agent-card-skill-tags">';
+                    for (const tag of skill.tags) {
+                        html += `<span class="agent-card-tag">${escapeHtml(tag)}</span>`;
+                    }
+                    html += '</div>';
+                }
+                html += '</div>';
+            }
+            html += '</div></div>';
+        }
+
+        if (card.capabilities) {
+            const caps = Object.entries(card.capabilities)
+                .filter(([, v]) => v)
+                .map(([k]) => escapeHtml(k));
+            if (caps.length) {
+                html += field('Capabilities', caps.join(', '));
+            }
+        }
+
+        html += '<div class="agent-card-raw">';
+        html += `<details><summary>Raw JSON</summary><pre><code>${escapeHtml(JSON.stringify(card, null, 2))}</code></pre></details>`;
+        html += '</div>';
+
+        html += '</div>';
+        container.innerHTML = html;
+    }
+
+    function field(label, valueHtml) {
+        return `<div class="agent-card-field">
+            <span class="agent-card-field-label">${label}</span>
+            <span class="agent-card-field-value">${valueHtml}</span>
+        </div>`;
+    }
+
+    document.getElementById('refreshCardBtn').addEventListener('click', fetchAgentCard);
 
 })();
