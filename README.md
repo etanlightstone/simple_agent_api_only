@@ -242,3 +242,189 @@ Or manually:
 RUN pip install pydantic-ai fasta2a fastapi uvicorn httpx requests pydantic PyYAML
 RUN pip install dominodatalab[agents]
 ```
+
+---
+
+## Home Grown Agent Registry Recipe
+
+When you have multiple A2A agents running, you need a way for them to find each other. The A2A protocol defines agent cards for capability discovery, but it assumes you already know the agent's URL. A registry fills that gap — agents register themselves on startup, and other agents query the registry to discover peers at runtime.
+
+### The registry: `a2a-registry`
+
+[a2a-registry](https://github.com/allenday/a2a-registry) is an open-source, pip-installable service that does exactly this. Run it as its own Domino App.
+
+**Install:**
+
+```bash
+pip install a2a-registry
+```
+
+**Start the server (Domino `app.sh`):**
+
+```bash
+a2a-registry serve --host 0.0.0.0 --port 8080
+```
+
+That gives you:
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `POST` | `/agents` | Register an agent (pass its agent card) |
+| `GET` | `/agents` | List all registered agents |
+| `POST` | `/agents/search` | Search agents by keyword |
+| `GET` | `/health` | Health check |
+
+### Self-registering an agent on startup
+
+Add this to any agent's startup code (e.g. in `chat_app.py` alongside the lifespan) so it announces itself to the registry every time it boots:
+
+```python
+import requests
+
+REGISTRY_URL = os.environ.get("A2A_REGISTRY_URL", "http://localhost:8080")
+
+def register_with_registry():
+    """Best-effort self-registration — non-fatal if registry is down."""
+    try:
+        requests.post(
+            f"{REGISTRY_URL}/agents",
+            json={
+                "agent_card": {
+                    "name": "Quote Agent",
+                    "description": "Answers questions with philosophy/science quotes",
+                    "url": "http://quote-agent:8000/a2a",
+                    "version": "1.0.0",
+                    "protocol_version": "0.3.0",
+                    "capabilities": {"streaming": False, "push_notifications": False},
+                    "default_input_modes": ["text"],
+                    "default_output_modes": ["text"],
+                    "skills": [
+                        {"id": "philosophy-quote", "description": "Random philosophy quote"},
+                        {"id": "science-quote", "description": "Random science quote"},
+                    ],
+                }
+            },
+            timeout=5,
+        )
+    except Exception:
+        pass  # registry might not be up yet — that's fine
+```
+
+### Wiring it into a pydantic-ai orchestrator agent
+
+The real payoff is an orchestrator agent that can discover and call other agents as tools. Here's a self-contained example — the LLM decides *which* agent to use based on what the registry returns:
+
+```python
+import asyncio
+import httpx
+import requests as req_lib
+from uuid import uuid4
+from pydantic_ai import Agent, RunContext
+from a2a.client import A2ACardResolver, A2AClient
+from a2a.types import MessageSendParams, SendMessageRequest
+
+REGISTRY_URL = "http://registry-app:8080"
+
+
+def list_available_agents(ctx: RunContext[str]) -> str:
+    """
+    Query the agent registry and return a summary of all available agents
+    and their skills. Use this to decide which agent to delegate to.
+    """
+    resp = req_lib.get(f"{REGISTRY_URL}/agents", timeout=5)
+    agents = resp.json()
+    lines = []
+    for entry in agents:
+        card = entry.get("agent_card", entry)
+        skills = ", ".join(s.get("id", "") for s in card.get("skills", []))
+        lines.append(f"- {card['name']} @ {card['url']}  skills: {skills}")
+    return "\n".join(lines) or "No agents registered."
+
+
+def search_agents(ctx: RunContext[str], query: str) -> str:
+    """
+    Search the registry for agents matching a keyword.
+    Returns names, URLs, and skill summaries.
+    """
+    resp = req_lib.post(
+        f"{REGISTRY_URL}/agents/search",
+        json={"query": query},
+        timeout=5,
+    )
+    results = resp.json()
+    lines = []
+    for entry in results:
+        card = entry.get("agent_card", entry)
+        lines.append(f"- {card['name']} @ {card['url']}: {card.get('description', '')}")
+    return "\n".join(lines) or "No matching agents found."
+
+
+async def call_a2a_agent(ctx: RunContext[str], agent_url: str, message: str) -> str:
+    """
+    Send a message to a remote A2A agent and return its response.
+    Pass the full A2A base URL (e.g. http://quote-agent:8000/a2a).
+    """
+    async with httpx.AsyncClient() as client:
+        resolver = A2ACardResolver(httpx_client=client, base_url=agent_url)
+        card = await resolver.get_agent_card()
+        a2a = A2AClient(httpx_client=client, agent_card=card)
+
+        resp = await a2a.send_message(SendMessageRequest(
+            id=str(uuid4()),
+            params=MessageSendParams(message={
+                "kind": "message",
+                "role": "user",
+                "parts": [{"kind": "text", "text": message}],
+                "messageId": uuid4().hex,
+            }),
+        ))
+        task = resp.result
+
+        while task.status.state in ("submitted", "working"):
+            await asyncio.sleep(1)
+            from a2a.types import GetTaskRequest, GetTaskParams
+            get_resp = await a2a.get_task(GetTaskRequest(
+                id=str(uuid4()),
+                params=GetTaskParams(id=task.id),
+            ))
+            task = get_resp.result
+
+        if task.artifacts:
+            return task.artifacts[0].parts[0].text
+        return f"Agent finished with state: {task.status.state}"
+
+
+orchestrator = Agent(
+    "openai:gpt-4.1-mini",
+    instructions=(
+        "You are an orchestrator. When the user asks a question, first check "
+        "the registry for available agents, pick the best one, then delegate "
+        "the question to it via call_a2a_agent. Return the agent's answer."
+    ),
+)
+orchestrator.tool(list_available_agents)
+orchestrator.tool(search_agents)
+orchestrator.tool(call_a2a_agent)
+```
+
+The orchestrator LLM sees the three tools, decides to call `list_available_agents` or `search_agents` first, picks the right `agent_url` from the results, then calls `call_a2a_agent` with the user's question. No hardcoded URLs in the prompt — it figures it out from the registry at runtime.
+
+### Architecture at a glance
+
+```
+┌─────────────┐       ┌──────────────────┐
+│  Registry   │◄──────│  Quote Agent     │  (self-registers on boot)
+│  Domino App │       │  Domino App      │
+│  :8080      │       │  :8000/a2a       │
+└──────┬──────┘       └──────────────────┘
+       │
+       │  GET /agents
+       ▼
+┌──────────────────┐       ┌──────────────────┐
+│  Orchestrator    │──────►│  Any A2A Agent   │
+│  Agent           │ A2A   │  (discovered     │
+│  Domino App      │       │   via registry)  │
+└──────────────────┘       └──────────────────┘
+```
+
+Each box is a separate Domino App. The registry is the only piece agents need to know the URL of — everything else is discovered.
