@@ -104,6 +104,7 @@ curl -X POST http://localhost:8888/a2a/ \
     "method": "message/send",
     "params": {
       "message": {
+        "kind": "message",
         "role": "user",
         "parts": [
           { "kind": "text", "text": "What is the meaning of life?" }
@@ -151,6 +152,7 @@ async def main():
             id=str(uuid4()),
             params=MessageSendParams(
                 message={
+                    "kind": "message",
                     "role": "user",
                     "parts": [
                         {"kind": "text", "text": "What is the meaning of life?"}

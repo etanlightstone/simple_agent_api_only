@@ -27,15 +27,16 @@ from simplest_agent import agent
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(SCRIPT_DIR, "static")
 
-# Build the A2A sub-app first so we can wire its TaskManager into
-# FastAPI's lifespan.  Mounted sub-apps don't get their own lifespan
-# triggered by the parent, so we do it explicitly.
+# Build the A2A sub-app first.  Mounted sub-apps don't get their own
+# lifespan triggered by the parent, so we delegate to the A2A app's
+# full lifespan (which starts the TaskManager, Agent, AND the background
+# Worker that processes tasks from the broker).
 a2a_app = agent.to_a2a()
 
 
 @asynccontextmanager
 async def lifespan(app):
-    async with a2a_app.task_manager:
+    async with a2a_app.router.lifespan_context(a2a_app):
         yield
 
 

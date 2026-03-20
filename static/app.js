@@ -65,6 +65,7 @@ curl -X POST '${BASE}/a2a/' \\
     "method": "message/send",
     "params": {
       "message": {
+        "kind": "message",
         "role": "user",
         "parts": [
           { "kind": "text", "text": "${escaped}" }
@@ -107,6 +108,7 @@ async def main():
             id=str(uuid4()),
             params=MessageSendParams(
                 message={
+                    "kind": "message",
                     "role": "user",
                     "parts": [
                         {"kind": "text", "text": "${message}"}
