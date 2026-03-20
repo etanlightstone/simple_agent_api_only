@@ -27,6 +27,34 @@ Once running, visit the root URL to open the **API Playground** — it auto-dete
 | `GET` | `/docs` | OpenAPI / Swagger interactive docs |
 | `GET` | `/` | API Playground UI |
 
+### Authentication in Domino
+
+When deployed as a Domino App, every API request needs a bearer token in the `Authorization` header. Inside any Domino workspace, notebook, or app, a short-lived token is available from a local endpoint:
+
+```
+http://localhost:8899/access-token
+```
+
+In **curl** you can inline this with command substitution — one copyable command, no extra steps:
+
+```bash
+-H "Authorization: Bearer $(curl -s http://localhost:8899/access-token)"
+```
+
+In **Python**:
+
+```python
+import requests
+token = requests.get("http://localhost:8899/access-token").text
+headers = {"Authorization": f"Bearer {token}"}
+```
+
+The token rotates every few minutes. Fetch a fresh one before each call (or batch of calls).
+
+> **Local testing:** When running outside Domino (`python chat_app.py --port 8888`), no auth is needed — skip the `Authorization` header and use `http://localhost:8888` as the URL.
+
+All samples below use `$APP_URL` as a placeholder. Replace it with your Domino App URL (visible on the App's overview page), e.g. `https://your-domino-host.com/app/quote-agent`.
+
 ---
 
 ## Using the REST API
@@ -36,8 +64,11 @@ The `/chat` endpoint accepts a JSON body and returns the agent's response. Any H
 ### curl
 
 ```bash
-curl -X POST http://localhost:8888/chat \
+APP_URL="https://your-domino-host.com/app/quote-agent"
+
+curl -X POST "$APP_URL/chat" \
   -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $(curl -s http://localhost:8899/access-token)" \
   -d '{"message": "What is the meaning of life?"}'
 ```
 
@@ -55,8 +86,12 @@ Response:
 ```python
 import requests
 
+APP_URL = "https://your-domino-host.com/app/quote-agent"
+TOKEN = requests.get("http://localhost:8899/access-token").text
+
 resp = requests.post(
-    "http://localhost:8888/chat",
+    f"{APP_URL}/chat",
+    headers={"Authorization": f"Bearer {TOKEN}"},
     json={"message": "What is the meaning of life?"}
 )
 print(resp.json()["response"])
@@ -65,9 +100,15 @@ print(resp.json()["response"])
 ### JavaScript
 
 ```javascript
-const res = await fetch('http://localhost:8888/chat', {
+const APP_URL = 'https://your-domino-host.com/app/quote-agent';
+const token = await fetch('http://localhost:8899/access-token').then(r => r.text());
+
+const res = await fetch(`${APP_URL}/chat`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+    },
     body: JSON.stringify({ message: 'What is the meaning of life?' })
 });
 const data = await res.json();
@@ -90,14 +131,20 @@ The [Agent-to-Agent (A2A) Protocol](https://google.github.io/A2A/) is an open st
 ### Discover the Agent Card
 
 ```bash
-curl http://localhost:8888/a2a/.well-known/agent-card.json
+APP_URL="https://your-domino-host.com/app/quote-agent"
+
+curl -H "Authorization: Bearer $(curl -s http://localhost:8899/access-token)" \
+  "$APP_URL/a2a/.well-known/agent-card.json"
 ```
 
 ### Send a message via A2A (curl)
 
 ```bash
-curl -X POST http://localhost:8888/a2a/ \
+APP_URL="https://your-domino-host.com/app/quote-agent"
+
+curl -X POST "$APP_URL/a2a/" \
   -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $(curl -s http://localhost:8899/access-token)" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
@@ -124,19 +171,25 @@ pip install a2a-sdk
 ```python
 import asyncio
 import httpx
+import requests as req_lib
 from uuid import uuid4
 from a2a.client import A2ACardResolver, A2AClient
 from a2a.types import MessageSendParams, SendMessageRequest
 
+APP_URL = "https://your-domino-host.com/app/quote-agent"
+TOKEN_URL = "http://localhost:8899/access-token"
+
 
 async def main():
-    base_url = "http://localhost:8888/a2a"
+    token = req_lib.get(TOKEN_URL).text
 
-    async with httpx.AsyncClient() as httpx_client:
+    async with httpx.AsyncClient(
+        headers={"Authorization": f"Bearer {token}"}
+    ) as httpx_client:
         # 1. Discover the agent card
         resolver = A2ACardResolver(
             httpx_client=httpx_client,
-            base_url=base_url,
+            base_url=f"{APP_URL}/a2a",
         )
         agent_card = await resolver.get_agent_card()
         print(f"Agent: {agent_card.name}")
@@ -170,29 +223,32 @@ asyncio.run(main())
 
 ### Multi-agent scenario
 
-In a multi-agent system, an orchestrator agent can discover and call this agent at runtime:
+In a multi-agent system, an orchestrator agent can discover and call this agent at runtime. Since both agents run as Domino Apps, the caller fetches a token and passes it via the httpx client:
 
 ```python
-# An orchestrator agent discovers available agents via their A2A cards,
-# then routes questions to the appropriate specialist.
+import requests as req_lib
 
-resolver = A2ACardResolver(httpx_client=httpx_client, base_url="http://philosophy-agent:8888/a2a")
-card = await resolver.get_agent_card()
+AGENT_URL = "https://your-domino-host.com/app/philosophy-agent"
+token = req_lib.get("http://localhost:8899/access-token").text
 
-# The card describes the agent's capabilities — the orchestrator can
-# inspect card.name, card.description, card.skills, etc. to decide
-# whether this agent is the right one for the current task.
+async with httpx.AsyncClient(
+    headers={"Authorization": f"Bearer {token}"}
+) as httpx_client:
+    resolver = A2ACardResolver(httpx_client=httpx_client, base_url=f"{AGENT_URL}/a2a")
+    card = await resolver.get_agent_card()
 
-client = A2AClient(httpx_client=httpx_client, agent_card=card)
+    # The card describes the agent's capabilities — the orchestrator can
+    # inspect card.name, card.description, card.skills, etc. to decide
+    # whether this agent is the right one for the current task.
 
-# Send a task and get the result
-response = await client.send_message(request)
+    client = A2AClient(httpx_client=httpx_client, agent_card=card)
+    response = await client.send_message(request)
 
-# Use context_id from the response to continue the conversation
-context_id = response.result.context_id
+    # Use context_id from the response to continue the conversation
+    context_id = response.result.context_id
 ```
 
-Each agent is a separate service with its own A2A endpoint. They don't need to share code, frameworks, or even languages — the A2A protocol handles the interop.
+Each agent is a separate Domino App with its own A2A endpoint. They don't need to share code, frameworks, or even languages — the A2A protocol handles the interop.
 
 ---
 
@@ -276,23 +332,33 @@ That gives you:
 
 ### Self-registering an agent on startup
 
-Add this to any agent's startup code (e.g. in `chat_app.py` alongside the lifespan) so it announces itself to the registry every time it boots:
+Add this to any agent's startup code (e.g. in `chat_app.py` alongside the lifespan) so it announces itself to the registry every time it boots. The `url` in the agent card should be the Domino App URL where this agent is reachable by other apps:
 
 ```python
+import os
 import requests
 
-REGISTRY_URL = os.environ.get("A2A_REGISTRY_URL", "http://localhost:8080")
+REGISTRY_URL = os.environ.get("A2A_REGISTRY_URL", "https://your-domino-host.com/app/a2a-registry")
+TOKEN_URL = "http://localhost:8899/access-token"
+SELF_URL = os.environ.get("SELF_APP_URL", "https://your-domino-host.com/app/quote-agent")
+
+def _domino_auth_headers():
+    if os.environ.get("DOMINO_API_HOST"):
+        token = requests.get(TOKEN_URL).text
+        return {"Authorization": f"Bearer {token}"}
+    return {}
 
 def register_with_registry():
     """Best-effort self-registration — non-fatal if registry is down."""
     try:
         requests.post(
             f"{REGISTRY_URL}/agents",
+            headers=_domino_auth_headers(),
             json={
                 "agent_card": {
                     "name": "Quote Agent",
                     "description": "Answers questions with philosophy/science quotes",
-                    "url": "http://quote-agent:8000/a2a",
+                    "url": f"{SELF_URL}/a2a",
                     "version": "1.0.0",
                     "protocol_version": "0.3.0",
                     "capabilities": {"streaming": False, "push_notifications": False},
@@ -316,6 +382,7 @@ The real payoff is an orchestrator agent that can discover and call other agents
 
 ```python
 import asyncio
+import os
 import httpx
 import requests as req_lib
 from uuid import uuid4
@@ -323,7 +390,18 @@ from pydantic_ai import Agent, RunContext
 from a2a.client import A2ACardResolver, A2AClient
 from a2a.types import MessageSendParams, SendMessageRequest
 
-REGISTRY_URL = "http://registry-app:8080"
+REGISTRY_URL = os.environ.get(
+    "A2A_REGISTRY_URL", "https://your-domino-host.com/app/a2a-registry"
+)
+TOKEN_URL = "http://localhost:8899/access-token"
+
+
+def _domino_headers():
+    """Fetch a fresh Domino bearer token (skip if running locally)."""
+    if os.environ.get("DOMINO_API_HOST"):
+        token = req_lib.get(TOKEN_URL).text
+        return {"Authorization": f"Bearer {token}"}
+    return {}
 
 
 def list_available_agents(ctx: RunContext[str]) -> str:
@@ -331,7 +409,9 @@ def list_available_agents(ctx: RunContext[str]) -> str:
     Query the agent registry and return a summary of all available agents
     and their skills. Use this to decide which agent to delegate to.
     """
-    resp = req_lib.get(f"{REGISTRY_URL}/agents", timeout=5)
+    resp = req_lib.get(
+        f"{REGISTRY_URL}/agents", headers=_domino_headers(), timeout=5,
+    )
     agents = resp.json()
     lines = []
     for entry in agents:
@@ -348,6 +428,7 @@ def search_agents(ctx: RunContext[str], query: str) -> str:
     """
     resp = req_lib.post(
         f"{REGISTRY_URL}/agents/search",
+        headers=_domino_headers(),
         json={"query": query},
         timeout=5,
     )
@@ -362,9 +443,10 @@ def search_agents(ctx: RunContext[str], query: str) -> str:
 async def call_a2a_agent(ctx: RunContext[str], agent_url: str, message: str) -> str:
     """
     Send a message to a remote A2A agent and return its response.
-    Pass the full A2A base URL (e.g. http://quote-agent:8000/a2a).
+    agent_url is the full A2A base URL from the registry
+    (e.g. https://your-domino-host.com/app/quote-agent/a2a).
     """
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(headers=_domino_headers()) as client:
         resolver = A2ACardResolver(httpx_client=client, base_url=agent_url)
         card = await resolver.get_agent_card()
         a2a = A2AClient(httpx_client=client, agent_card=card)
@@ -407,24 +489,24 @@ orchestrator.tool(search_agents)
 orchestrator.tool(call_a2a_agent)
 ```
 
-The orchestrator LLM sees the three tools, decides to call `list_available_agents` or `search_agents` first, picks the right `agent_url` from the results, then calls `call_a2a_agent` with the user's question. No hardcoded URLs in the prompt — it figures it out from the registry at runtime.
+The orchestrator LLM sees the three tools, decides to call `list_available_agents` or `search_agents` first, picks the right `agent_url` from the results, then calls `call_a2a_agent` with the user's question. No hardcoded URLs in the prompt — it figures it out from the registry at runtime. The `_domino_headers()` helper fetches a fresh bearer token for each call when running in Domino, and is a no-op when running locally.
 
 ### Architecture at a glance
 
 ```
-┌─────────────┐       ┌──────────────────┐
-│  Registry   │◄──────│  Quote Agent     │  (self-registers on boot)
-│  Domino App │       │  Domino App      │
-│  :8080      │       │  :8000/a2a       │
-└──────┬──────┘       └──────────────────┘
-       │
-       │  GET /agents
-       ▼
+┌──────────────────┐       ┌──────────────────┐
+│  Registry        │◄──────│  Quote Agent     │  (self-registers on boot)
+│  Domino App      │       │  Domino App      │
+│  /app/registry   │       │  /app/quote-agent│
+└────────┬─────────┘       └──────────────────┘
+         │
+         │  GET /agents  (+ bearer token)
+         ▼
 ┌──────────────────┐       ┌──────────────────┐
 │  Orchestrator    │──────►│  Any A2A Agent   │
 │  Agent           │ A2A   │  (discovered     │
-│  Domino App      │       │   via registry)  │
+│  Domino App      │  +auth│   via registry)  │
 └──────────────────┘       └──────────────────┘
 ```
 
-Each box is a separate Domino App. The registry is the only piece agents need to know the URL of — everything else is discovered.
+Each box is a separate Domino App. The registry is the only piece agents need to know the URL of — everything else is discovered. All inter-app calls include the bearer token from `localhost:8899`.
