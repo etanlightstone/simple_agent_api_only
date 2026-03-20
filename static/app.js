@@ -16,7 +16,7 @@
 
     document.getElementById('ep-chat').textContent = `${BASE}/chat`;
     document.getElementById('ep-health').textContent = `${BASE}/health`;
-    document.getElementById('ep-a2a-send').textContent = `${BASE}/a2a`;
+    document.getElementById('ep-a2a-send').textContent = `${BASE}/a2a/`;
     document.getElementById('ep-a2a-card').textContent = `${BASE}/a2a/.well-known/agent-card.json`;
     document.getElementById('ep-docs').textContent = `${BASE}/docs`;
 
@@ -57,7 +57,7 @@ console.log(data.response);`,
 curl '${BASE}/a2a/.well-known/agent-card.json'
 
 # Send a message via the A2A protocol (JSON-RPC 2.0)
-curl -X POST '${BASE}/a2a' \\
+curl -X POST '${BASE}/a2a/' \\
   -H 'Content-Type: application/json' \\
   -d '{
     "jsonrpc": "2.0",

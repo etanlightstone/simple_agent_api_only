@@ -22,7 +22,7 @@ Once running, visit the root URL to open the **API Playground** — it auto-dete
 |--------|------|---------|
 | `POST` | `/chat` | REST API — send a message, get a response |
 | `GET` | `/health` | Health check |
-| `POST` | `/a2a` | A2A protocol (`message/send`, JSON-RPC 2.0) |
+| `POST` | `/a2a/` | A2A protocol (`message/send`, JSON-RPC 2.0) |
 | `GET` | `/a2a/.well-known/agent-card.json` | A2A Agent Card (capability discovery) |
 | `GET` | `/docs` | OpenAPI / Swagger interactive docs |
 | `GET` | `/` | API Playground UI |
@@ -96,7 +96,7 @@ curl http://localhost:8888/a2a/.well-known/agent-card.json
 ### Send a message via A2A (curl)
 
 ```bash
-curl -X POST http://localhost:8888/a2a \
+curl -X POST http://localhost:8888/a2a/ \
   -H 'Content-Type: application/json' \
   -d '{
     "jsonrpc": "2.0",

@@ -151,7 +151,7 @@ if __name__ == "__main__":
     print(f"Starting chat server on http://localhost:{args.port}")
     print(f"  Chat UI:      http://localhost:{args.port}/")
     print(f"  REST API:     POST http://localhost:{args.port}/chat")
-    print(f"  A2A protocol: POST http://localhost:{args.port}/a2a/message/send")
+    print(f"  A2A protocol: POST http://localhost:{args.port}/a2a/")
     print(f"  A2A card:     GET  http://localhost:{args.port}/a2a/.well-known/agent-card.json")
     print(f"  Health:       GET  http://localhost:{args.port}/health")
     print(f"Serving static files from: {STATIC_DIR}")
