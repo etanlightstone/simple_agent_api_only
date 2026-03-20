@@ -4,17 +4,38 @@ A pydantic_ai agent deployed as a hybrid REST + [A2A (Agent-to-Agent)](https://g
 
 ## Quick Start
 
-```bash
-# Install dependencies
-pip install -r requirements.txt
+### Run as a Domino App
 
-# Run the server
+Point the Domino App at `app.sh` — it installs dependencies and starts the server:
+
+```bash
+#!/bin/bash
+PORT=8888
+python chat_app.py --debug --port $PORT
+```
+
+Once published, the App URL is your API base URL for all the examples below.
+
+### Run as a Domino Agent
+
+This project can also be deployed as a **Domino Agent**, which adds production tracing, scheduled evaluations, and the ability to deploy directly from a validated experiment run. See the Domino docs: [Deploy agentic systems](https://docs.dominodatalab.com/en/cloud/user_guide/5aedde/deploy-agentic-systems/).
+
+### Run locally (outside Domino)
+
+```bash
+pip install -r requirements.txt
 python chat_app.py --port 8888 --debug
 ```
 
-When deployed as a Domino App, `app.sh` does this automatically.
+No bearer token is needed when running locally — just use `http://localhost:8888`.
 
-Once running, visit the root URL to open the **API Playground** — it auto-detects the host/port and shows copy-paste sample code for every endpoint.
+### API Playground
+
+Once running, visit the root URL to open the **API Playground** — it auto-detects the host/port and shows copy-paste sample code for every endpoint (including the bearer token when running in Domino).
+
+![API Playground — Try It panel and code samples](static/screenshot1.png)
+
+![Agent Card — capability discovery and skill listing](static/screenshot2.png)
 
 ## Endpoints
 
