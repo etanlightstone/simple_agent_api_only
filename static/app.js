@@ -209,18 +209,32 @@ async def main():
     (async () => {
         const dot = document.getElementById('statusDot');
         const text = document.getElementById('statusText');
+        const statusRunning = document.getElementById('statusRunning');
         try {
             const res = await fetch(`${BASE}/health`);
             if (res.ok) {
                 dot.className = 'status-dot online';
                 text.textContent = 'Online';
+                if (statusRunning) statusRunning.textContent = 'Running';
             } else {
                 throw new Error();
             }
         } catch {
             dot.className = 'status-dot offline';
             text.textContent = 'Offline';
+            if (statusRunning) {
+                statusRunning.textContent = 'Offline';
+                statusRunning.style.color = '#D9534F';
+            }
         }
     })();
+
+    // --- "View App" top button triggers the Try It send -------------------
+    const tryBtnTop = document.getElementById('tryBtnTop');
+    if (tryBtnTop) {
+        tryBtnTop.addEventListener('click', () => {
+            window.open(`${BASE}/docs`, '_blank');
+        });
+    }
 
 })();

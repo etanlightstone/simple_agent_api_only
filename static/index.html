@@ -3,25 +3,66 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Agent API Playground</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <title>Agent API Playground · Domino</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+    <!-- Domino top navigation bar -->
     <header class="header">
-        <div class="header-icon">⚡</div>
-        <div class="header-content">
-            <h1>Agent API Playground</h1>
-            <p>REST + A2A Protocol</p>
-        </div>
-        <div class="status-indicator">
-            <div class="status-dot" id="statusDot"></div>
-            <span id="statusText">Checking...</span>
+        <a class="header-logo" href="#">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="2" y="2" width="9" height="9" rx="1.5" fill="white"/>
+                <rect x="13" y="2" width="9" height="9" rx="1.5" fill="white" opacity="0.5"/>
+                <rect x="2" y="13" width="9" height="9" rx="1.5" fill="white" opacity="0.5"/>
+                <rect x="13" y="13" width="9" height="9" rx="1.5" fill="white"/>
+            </svg>
+            <span>Domino</span>
+        </a>
+        <nav class="header-nav">
+            <button class="header-nav-item">Data</button>
+            <button class="header-nav-item">Develop</button>
+            <button class="header-nav-item active">Deploy</button>
+            <button class="header-nav-item">Govern</button>
+        </nav>
+        <div class="header-right">
+            <div class="status-indicator">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">Checking…</span>
+            </div>
+            <button class="header-account">Account</button>
         </div>
     </header>
 
+    <!-- Breadcrumb -->
+    <nav class="breadcrumb">
+        <span class="separator">←</span>
+        <a href="#">Apps &amp; Agents</a>
+        <span class="separator">/</span>
+        <span class="current">Agent API Playground</span>
+    </nav>
+
+    <!-- Page header -->
+    <div class="page-header">
+        <div class="page-title-row">
+            <h1>Agent API Playground</h1>
+            <span class="version-badge">REST + A2A</span>
+            <div class="page-actions">
+                <button class="btn-primary" style="width:auto; margin-bottom:0;" id="tryBtnTop" title="Send request from the Try It panel">▶ View App</button>
+                <button class="btn-outline">Share</button>
+            </div>
+        </div>
+        <div class="page-meta">
+            <span>simplest_agent</span>
+            <span class="status-running" id="statusRunning">Running</span>
+            <span>Local</span>
+        </div>
+        <div class="page-tabs">
+            <button class="page-tab active" data-page-tab="playground">Playground</button>
+            <button class="page-tab" data-page-tab="usage">Usage</button>
+        </div>
+    </div>
+
+    <!-- Main content -->
     <main class="playground">
         <!-- Try It panel -->
         <section class="panel try-panel">
@@ -36,7 +77,7 @@
             </div>
         </section>
 
-        <!-- Tabs for code samples -->
+        <!-- Code samples panel -->
         <section class="panel code-panel">
             <div class="tabs">
                 <button class="tab active" data-tab="curl">curl</button>
