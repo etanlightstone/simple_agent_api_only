@@ -10,6 +10,9 @@
 
     const BASE = getBaseUrl();
 
+    let IN_DOMINO = false;
+    let TOKEN_URL = '';
+
     function escapeHtml(str) {
         return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
@@ -24,18 +27,39 @@
 
     // --- Code snippets (dynamically use BASE) ----------------------------
 
+    function authCurlHeader() {
+        return `  -H "Authorization: Bearer $(curl -s ${TOKEN_URL})" \\`;
+    }
+
     function generateSnippets(message) {
         const escaped = message.replace(/'/g, "'\\''");
         const jsEscaped = message.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
+        const curlAuth = IN_DOMINO ? `\n${authCurlHeader()}` : '';
+
         return {
             curl: `curl -X POST '${BASE}/chat' \\
-  -H 'Content-Type: application/json' \\
+  -H 'Content-Type: application/json' \\${curlAuth}
   -d '{
     "message": "${escaped}"
   }'`,
 
-            python: `import requests
+            python: IN_DOMINO
+                ? `import requests
+
+# Fetch a short-lived Domino auth token
+token = requests.get("${TOKEN_URL}").text
+
+response = requests.post(
+    "${BASE}/chat",
+    headers={"Authorization": f"Bearer {token}"},
+    json={"message": "${message}"}
+)
+
+data = response.json()
+print(data["response"])
+# >>> "The unexamined life is not worth living. — Socrates"`
+                : `import requests
 
 response = requests.post(
     "${BASE}/chat",
@@ -46,7 +70,23 @@ data = response.json()
 print(data["response"])
 # >>> "The unexamined life is not worth living. — Socrates"`,
 
-            javascript: `const response = await fetch('${BASE}/chat', {
+            javascript: IN_DOMINO
+                ? `// Fetch a short-lived Domino auth token
+const tokenRes = await fetch('${TOKEN_URL}');
+const token = await tokenRes.text();
+
+const response = await fetch('${BASE}/chat', {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json',
+        'Authorization': \`Bearer \${token}\`
+    },
+    body: JSON.stringify({ message: '${jsEscaped}' })
+});
+
+const data = await response.json();
+console.log(data.response);`
+                : `const response = await fetch('${BASE}/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message: '${jsEscaped}' })
@@ -55,7 +95,49 @@ print(data["response"])
 const data = await response.json();
 console.log(data.response);`,
 
-            'a2a-curl': `# Step 1 — Discover the agent card
+            'a2a-curl': IN_DOMINO
+                ? `# Step 1 — Discover the agent card
+curl \\
+${authCurlHeader()}
+  '${BASE}/a2a/.well-known/agent-card.json'
+
+# Step 2 — Send a message (returns a task ID immediately)
+curl -X POST '${BASE}/a2a/' \\
+  -H 'Content-Type: application/json' \\
+${authCurlHeader()}
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "message/send",
+    "params": {
+      "message": {
+        "kind": "message",
+        "role": "user",
+        "parts": [
+          { "kind": "text", "text": "${escaped}" }
+        ],
+        "messageId": "msg-001"
+      }
+    }
+  }'
+# ↑ Response includes "result.id" — the task ID.
+
+# Step 3 — Poll for the completed result
+# Replace TASK_ID with the "result.id" value from Step 2.
+curl -X POST '${BASE}/a2a/' \\
+  -H 'Content-Type: application/json' \\
+${authCurlHeader()}
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "tasks/get",
+    "params": {
+      "id": "TASK_ID"
+    }
+  }'
+# Repeat until result.status.state is "completed".
+# The agent reply is in result.artifacts[0].parts[0].text`
+                : `# Step 1 — Discover the agent card
 curl '${BASE}/a2a/.well-known/agent-card.json'
 
 # Step 2 — Send a message (returns a task ID immediately)
@@ -93,7 +175,65 @@ curl -X POST '${BASE}/a2a/' \\
 # Repeat until result.status.state is "completed".
 # The agent reply is in result.artifacts[0].parts[0].text`,
 
-            'a2a-python': `# pip install a2a-sdk httpx
+            'a2a-python': IN_DOMINO
+                ? `# pip install a2a-sdk httpx
+import asyncio, httpx, requests as req_lib
+from uuid import uuid4
+from a2a.client import A2ACardResolver, A2AClient
+from a2a.types import (
+    MessageSendParams, SendMessageRequest,
+    GetTaskRequest, GetTaskParams,
+)
+
+async def main():
+    base_url = "${BASE}/a2a"
+    token = req_lib.get("${TOKEN_URL}").text
+
+    async with httpx.AsyncClient(
+        headers={"Authorization": f"Bearer {token}"}
+    ) as httpx_client:
+        # 1. Discover the agent card
+        resolver = A2ACardResolver(
+            httpx_client=httpx_client, base_url=base_url,
+        )
+        agent_card = await resolver.get_agent_card()
+        print(f"Agent: {agent_card.name}")
+
+        # 2. Send a message (returns immediately with task ID)
+        client = A2AClient(
+            httpx_client=httpx_client, agent_card=agent_card,
+        )
+        send_resp = await client.send_message(SendMessageRequest(
+            id=str(uuid4()),
+            params=MessageSendParams(message={
+                "kind": "message",
+                "role": "user",
+                "parts": [{"kind": "text", "text": "${message}"}],
+                "messageId": uuid4().hex,
+            }),
+        ))
+        task = send_resp.result
+        print(f"Task submitted: {task.id}  state={task.status.state}")
+
+        # 3. Poll until the task completes
+        while task.status.state in ("submitted", "working"):
+            await asyncio.sleep(1)
+            get_resp = await client.get_task(GetTaskRequest(
+                id=str(uuid4()),
+                params=GetTaskParams(id=task.id),
+            ))
+            task = get_resp.result
+            print(f"  state={task.status.state}")
+
+        # 4. Read the agent's answer
+        if task.artifacts:
+            for part in task.artifacts[0].parts:
+                print(f"Agent: {part.text}")
+        else:
+            print(f"Task ended with state: {task.status.state}")
+
+asyncio.run(main())`
+                : `# pip install a2a-sdk httpx
 import asyncio, httpx
 from uuid import uuid4
 from a2a.client import A2ACardResolver, A2AClient
@@ -165,10 +305,33 @@ asyncio.run(main())`,
     // --- Agent Card code snippets ----------------------------------------
 
     function generateCardSnippets() {
-        return {
-            'card-curl': `curl '${BASE}/a2a/.well-known/agent-card.json' | python -m json.tool`,
+        const curlAuth = IN_DOMINO ? ` \\\n${authCurlHeader()}\n ` : ' ';
 
-            'card-python': `import requests
+        return {
+            'card-curl': IN_DOMINO
+                ? `curl \\
+${authCurlHeader()}
+  '${BASE}/a2a/.well-known/agent-card.json' | python -m json.tool`
+                : `curl '${BASE}/a2a/.well-known/agent-card.json' | python -m json.tool`,
+
+            'card-python': IN_DOMINO
+                ? `import requests
+
+token = requests.get("${TOKEN_URL}").text
+
+response = requests.get(
+    "${BASE}/a2a/.well-known/agent-card.json",
+    headers={"Authorization": f"Bearer {token}"}
+)
+card = response.json()
+
+print(f"Agent: {card['name']}")
+print(f"Description: {card['description']}")
+print(f"Version: {card['version']}")
+print(f"Skills: {len(card.get('skills', []))}")
+for skill in card.get("skills", []):
+    print(f"  - {skill['name']}: {skill['description']}")`
+                : `import requests
 
 response = requests.get("${BASE}/a2a/.well-known/agent-card.json")
 card = response.json()
@@ -180,7 +343,22 @@ print(f"Skills: {len(card.get('skills', []))}")
 for skill in card.get("skills", []):
     print(f"  - {skill['name']}: {skill['description']}")`,
 
-            'card-javascript': `const response = await fetch('${BASE}/a2a/.well-known/agent-card.json');
+            'card-javascript': IN_DOMINO
+                ? `const tokenRes = await fetch('${TOKEN_URL}');
+const token = await tokenRes.text();
+
+const response = await fetch('${BASE}/a2a/.well-known/agent-card.json', {
+    headers: { 'Authorization': \`Bearer \${token}\` }
+});
+const card = await response.json();
+
+console.log(\`Agent: \${card.name}\`);
+console.log(\`Description: \${card.description}\`);
+console.log(\`Version: \${card.version}\`);
+for (const skill of card.skills ?? []) {
+    console.log(\`  - \${skill.name}: \${skill.description}\`);
+}`
+                : `const response = await fetch('${BASE}/a2a/.well-known/agent-card.json');
 const card = await response.json();
 
 console.log(\`Agent: \${card.name}\`);
@@ -201,6 +379,27 @@ for (const skill of card.skills ?? []) {
     }
 
     updateCardSnippets();
+
+    // --- Fetch platform info and re-render if in Domino ------------------
+
+    (async () => {
+        try {
+            const res = await fetch(`${BASE}/platform-info`);
+            if (res.ok) {
+                const info = await res.json();
+                if (info.in_domino) {
+                    IN_DOMINO = true;
+                    TOKEN_URL = info.token_url;
+
+                    const platformLabel = document.getElementById('platformLabel');
+                    if (platformLabel) platformLabel.textContent = 'Domino';
+
+                    updateSnippets();
+                    updateCardSnippets();
+                }
+            }
+        } catch { /* non-critical — snippets stay in local/no-auth mode */ }
+    })();
 
     // --- Code panel tabs (playground) ------------------------------------
 

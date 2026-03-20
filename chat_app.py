@@ -121,6 +121,19 @@ async def health_check():
     return {"status": "healthy", "agent": "simplest_agent"}
 
 
+IN_DOMINO = bool(os.environ.get("DOMINO_API_HOST"))
+TOKEN_URL = "http://localhost:8899/access-token"
+
+
+@app.get("/platform-info")
+async def platform_info():
+    """Tell the UI whether we're running inside Domino (auth required for API calls)."""
+    return {
+        "in_domino": IN_DOMINO,
+        **({"token_url": TOKEN_URL} if IN_DOMINO else {}),
+    }
+
+
 # A2A protocol — other agents can reach this at /a2a/
 # and discover the agent card at /a2a/.well-known/agent-card.json
 app.mount("/a2a", a2a_app)

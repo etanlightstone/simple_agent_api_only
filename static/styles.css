@@ -492,6 +492,7 @@ pre code {
 .endpoints-panel {
     grid-column: 1;
     grid-row: 2;
+    overflow: hidden;
 }
 
 .endpoint-list {
@@ -510,6 +511,7 @@ pre code {
     font-size: 0.8125rem;
     border: 1px solid transparent;
     transition: border-color 0.15s;
+    overflow-x: auto;
 }
 
 .endpoint:hover {
@@ -520,7 +522,7 @@ pre code {
     font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
     font-size: 0.75rem;
     color: var(--text-primary);
-    flex-shrink: 0;
+    white-space: nowrap;
 }
 
 .ep-desc {
