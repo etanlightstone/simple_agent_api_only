@@ -31,7 +31,33 @@ STATIC_DIR = os.path.join(SCRIPT_DIR, "static")
 # lifespan triggered by the parent, so we delegate to the A2A app's
 # full lifespan (which starts the TaskManager, Agent, AND the background
 # Worker that processes tasks from the broker).
-a2a_app = agent.to_a2a()
+a2a_app = agent.to_a2a(
+    name="Quote Agent",
+    description=(
+        "An agent that answers any question with a random philosophy or science quote. "
+        "Science-related questions get science quotes; everything else gets philosophy quotes. "
+        "It never answers directly — only through quotes."
+    ),
+    version="1.0.0",
+    skills=[
+        {
+            "id": "philosophy-quote",
+            "name": "Philosophy Quote",
+            "description": "Responds to general questions with a random philosophy quote.",
+            "tags": ["philosophy", "quotes", "general"],
+        },
+        {
+            "id": "science-quote",
+            "name": "Science Quote",
+            "description": "Responds to science-related questions with a random science quote.",
+            "tags": ["science", "quotes", "stem"],
+        },
+    ],
+    provider={
+        "organization": "Domino Data Lab",
+        "url": "https://www.dominodatalab.com",
+    },
+)
 
 
 @asynccontextmanager
