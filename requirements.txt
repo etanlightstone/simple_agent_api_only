@@ -14,5 +14,6 @@ requests>=2.31.0
 pydantic>=2.12.3
 PyYAML>=6.0.2
 
-# Domino platform SDK (provides domino.agents.tracing, domino.agents.logging)
-dominodatalab>=2.0.0
+# # Domino platform SDK (provides domino.agents.tracing, domino.agents.logging)
+# doont need this when running inside domino
+# dominodatalab>=2.0.0
