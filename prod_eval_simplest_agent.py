@@ -7,7 +7,7 @@ from datetime import datetime
 project_name = os.environ.get("DOMINO_PROJECT_NAME")
 timestamp_path = "/mnt/data/" + project_name + "/last_trace_time.txt"
 
-AGENT_ID = "6932018a2b87e031b1308f9f"
+AGENT_ID = "69bdcc141409567e374cf47e"
 VERSION = "6932018a2b87e031b1308fa1"
 
 def read_or_init_timestamp(path: str) -> float:
