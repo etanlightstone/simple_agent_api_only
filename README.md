@@ -98,7 +98,7 @@ Response:
 ```json
 {
   "response": "The unexamined life is not worth living. — Socrates",
-  "conversation_id": "140234866205"
+  "conversation_id": "abc123"
 }
 ```
 
